@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI 文字渐显预览</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f6f7f8;color:#26313a;font:16px/1.8 system-ui,sans-serif}main{max-width:820px;margin:48px auto;padding:0 24px}h1{font-size:26px;margin:0 0 8px}p{margin:0 0 20px;color:#66717c}label{display:block;margin-bottom:6px}textarea{width:100%;min-height:120px;padding:14px;border:1px solid #cbd2d8;border-radius:10px;font:inherit;background:#fff;color:inherit;resize:vertical}nav{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}button{border:1px solid #b8c4cf;border-radius:8px;padding:10px 16px;background:white;color:#26313a;cursor:pointer;font:inherit}button:first-child{background:#27536b;color:white;border-color:#27536b}button:focus-visible,textarea:focus-visible{outline:3px solid #78a5c4;outline-offset:3px}.paper{min-height:220px;background:white;border:1px solid #dce2e7;border-radius:12px;padding:24px}.output{white-space:pre-wrap;overflow-wrap:anywhere}.letter{opacity:0;animation:letter-in 1s linear forwards}@keyframes letter-in{0%{opacity:.025}20%{opacity:.08}55%{opacity:.4}100%{opacity:1}}small{display:block;color:#66717c;margin-top:14px}@media(prefers-reduced-motion:reduce){.letter{animation:none;opacity:1}}@media(max-width:520px){main{margin:24px auto;padding:0 16px}.paper{padding:18px}}
+</style>
+<main>
+  <h1>AI 文字渐显</h1>
+  <p>新文字先淡后实，快慢交替，穿插短暂停顿。以下为本地显示动画。</p>
+  <label for="source">试试自己的文字</label>
+  <textarea id="source" maxlength="6000">一段文字不必像打字机那样匀速出现。新输出的字先很淡，过一会儿才逐渐清晰；前面的字已经变实，后面的字还在浮现。
+
+有时连着出来一小段，有时稍微停一下。停顿不必总在句号后面，读起来才有自然的节奏。</textarea>
+  <nav aria-label="预览操作"><button id="replay">重新播放</button><button id="finish">立即完成</button></nav>
+  <section class="paper" aria-label="文字效果预览"><div id="output" class="output"></div></section>
+  <small>每字淡入 1 秒 · 切换窗口仍计时 · 尊重系统减少动画设置 · 无网络请求</small>
+</main>
+<script>
+// 保留组合 emoji 与带组合符的字符；旧浏览器回退到 Unicode 码点。
+const graphemes = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null
+function splitCharacters(text) {
+  return graphemes ? Array.from(graphemes.segment(text), item => item.segment) : Array.from(text)
+}
+
+// 按中文词组缓冲成小段；显示速度与段间停顿分开，避免匀速打字机效果。
+const segmenter = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('zh', { granularity: 'word' }) : null
+
+function textDelays(text) {
+  const words = segmenter
+    ? Array.from(segmenter.segment(text || ''), item => item.segment)
+    : (text || '').match(/[A-Za-z0-9]+(?:[./_-][A-Za-z0-9]+)*|[\s\S]/gu) || []
+  const sizes = [5, 10, 4, 13, 7, 9]
+  const paces = [34, 9, 48, 7, 24, 12]
+  const pauses = [0, 70, 0, 430, 90, 650]
+  const chunks = []
+  let pending = ''
+  let length = 0
+  for (const word of words) {
+    pending += word
+    length += splitCharacters(word).length
+    if (length >= sizes[chunks.length % sizes.length]) {
+      chunks.push(pending)
+      pending = ''
+      length = 0
+    }
+  }
+  if (pending) chunks.push(pending)
+
+  let elapsed = 0
+  return chunks.flatMap((chunk, index) => {
+    const letters = splitCharacters(chunk)
+    elapsed += pauses[index % pauses.length]
+    return letters.map((_, position) => {
+      const delay = elapsed
+      const progress = position / Math.max(letters.length - 1, 1)
+      elapsed += Math.round(paces[index % paces.length] * (.75 + .5 * Math.sin(Math.PI * progress)))
+      return delay
+    })
+  })
+}
+
+const source=document.querySelector('#source'),output=document.querySelector('#output')
+let text='',startedAt=0,complete=false
+function render(){
+  const fragment=document.createDocumentFragment(),offset=Date.now()-startedAt
+  const delays=textDelays(text)
+  if(complete){output.textContent=text;return}
+  splitCharacters(text).forEach((letter,index)=>{
+    const span=document.createElement('span')
+    span.className='letter';span.textContent=letter
+    span.style.animationDelay=`${delays[index]-offset}ms`
+    fragment.append(span)
+  })
+  output.replaceChildren(fragment)
+}
+function replay(){text=source.value;startedAt=Date.now();complete=false;render()}
+document.querySelector('#replay').addEventListener('click',replay)
+document.querySelector('#finish').addEventListener('click',()=>{complete=true;render()})
+function resume(){if(!document.hidden&&!complete)render()}
+document.addEventListener('visibilitychange',resume)
+window.addEventListener('focus',resume)
+replay()
+</script>
+</html>

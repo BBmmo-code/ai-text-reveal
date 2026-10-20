@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI 文字渐显"
+  short_description: "为网页添加新字淡入、非匀速输出和自然停顿，附可复用组件及离线预览"
+  default_prompt: "使用 $ai-text-reveal 为这个页面加入新文字由淡到实、输出快慢交替的效果。"
